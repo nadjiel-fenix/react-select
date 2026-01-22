@@ -9,14 +9,27 @@ import type { DefaultOption, DefaultGroup } from "./types";
 interface PromiseController<R, E> {
   resolve: (res: R) => void;
   reject: (err: E) => void;
+  commit: (callback?: () => void) => void;
 }
 
 function createPromiseController<R, E>(): PromiseController<R, E> {
   return {
     resolve: () => {},
     reject: () => {},
+    commit: function(callback) {
+      return new Promise<R>((resolve, reject) => {
+        this.resolve = resolve;
+        this.reject = reject;
+
+        callback?.();
+      });
+    }
   }
 }
+
+const promise = createPromiseController();
+
+new Promise((resolve) => promise.resolve = resolve)
 
 const options = [
   createOption("Risotto"),
@@ -272,9 +285,7 @@ describe("select", () => {
 
     render(
       <Select<DefaultOption, false, DefaultGroup>
-        loadOptions={() => new Promise(
-          (resolve) => promise.resolve = resolve
-        )}
+        loadOptions={() => promise.commit()}
         defaultOptions={defaultOptions}
       />
     );
@@ -365,9 +376,7 @@ describe("select", () => {
 
     render(
       <Select<DefaultOption, false, DefaultGroup>
-        loadOptions={() => new Promise(
-          (resolve) => promise.resolve = resolve
-        )}
+        loadOptions={() => promise.commit()}
         defaultOptions={defaultOptions}
       />
     );
@@ -427,7 +436,7 @@ describe("select", () => {
     // Act
     render(
       <Select<DefaultOption, false, DefaultGroup>
-        loadOptions={() => new Promise((resolve) => promise.resolve = resolve)}
+        loadOptions={() => promise.commit()}
         autoload
         components={{
           LoadingIndicator: () => <span>Loading</span>
@@ -611,9 +620,7 @@ describe("select", () => {
     
     render(
       <Select<DefaultOption, false, DefaultGroup>
-        loadOptions={
-          () => new Promise((resolve) => promise.resolve = resolve)
-        }
+        loadOptions={() => promise.commit()}
         isLoading
         components={{
           LoadingIndicator: () => <span>Loading</span>
@@ -646,5 +653,102 @@ describe("select", () => {
     
     // Assert
     expect(onCreateOption).toHaveBeenCalledWith("Rocambolli");
+  });
+
+  it("uses controlled value", async () => {
+    // Arrange
+    const value = createOption("Waffles");
+    
+    render(
+      <Select options={options} value={value} />
+    );
+
+    const select = screen.getByRole("combobox");
+
+    // Act
+    await userEvent.click(select);
+    await userEvent.click(await screen.findByText("Beans"));
+    
+    // Assert
+    expect(screen.queryByText("Waffles")).toBeInTheDocument();
+  });
+
+  it("triggers onChange", async () => {
+    // Arrange
+    const onChange = vi.fn();
+    
+    render(
+      <Select options={options} onChange={onChange} />
+    );
+
+    const select = screen.getByRole("combobox");
+
+    // Act
+    await userEvent.click(select);
+    await userEvent.click(await screen.findByText("Beans"));
+    
+    // Assert
+    expect(onChange).toHaveBeenCalledWith(
+      options.find(o => o.label === "Beans"),
+      expect.anything()
+    );
+  });
+
+  it("uses defaultValue", async () => {
+    // Arrange
+    const defaultValue = createOption("Waffles");
+    
+    // Act
+    render(
+      <Select defaultValue={defaultValue} />
+    );
+    
+    // Assert
+    expect(screen.queryByText("Waffles")).toBeInTheDocument();
+  });
+
+  it("loads defaultValue", async () => {
+    // Arrange
+    const loadDefaultValue = () =>
+      Promise.resolve(createOption("Waffles"));
+    
+    // Act
+    render(
+      <Select loadDefaultValue={loadDefaultValue} />
+    );
+    
+    // Assert
+    expect(await screen.findByText("Waffles")).toBeInTheDocument();
+  });
+
+  it("keeps loadings independent", async () => {
+    // Arrange
+    const defaultValuePromise = createPromiseController();
+    const optionsPromise = createPromiseController();
+    
+    render(
+      <Select
+        loadDefaultValue={() => defaultValuePromise.commit()}
+        loadOptions={() => optionsPromise.commit()}
+        autoload
+        components={{
+          LoadingIndicator: () => <span>Loading</span>
+        }}
+      />
+    );
+
+    const loadingIndicator = await screen.findByText("Loading");
+
+    // Act
+    defaultValuePromise.resolve(createOption("Waffles"));
+    
+    // Assert
+    expect(loadingIndicator).toBeInTheDocument();
+
+    optionsPromise.resolve(options);
+    
+    await waitForElementToBeRemoved(loadingIndicator);
+
+    expect(screen.queryByText("Loading")).not.toBeInTheDocument();
   });
 });
