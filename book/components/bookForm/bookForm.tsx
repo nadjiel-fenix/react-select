@@ -6,6 +6,7 @@ import Select from "@/lib/components/select";
 import authors from "@/api/authors";
 import { createOption } from "@/lib/components/select/lib";
 import type { Author } from "@/api/types";
+import type { Props, SchemaInput, SchemaOutput } from "./types";
 
 async function loadAuthors() {
   return authors.getAll().then(res => res.data);
@@ -15,33 +16,27 @@ function authorToOption(author: Author) {
   return createOption(author.name, author.id.toString());
 }
 
-export default function BookForm() {
-  const { register, handleSubmit } = useForm({
-    defaultValues: {
-      name: "",
-    }
+export default function BookForm({
+  data,
+  onValid,
+  onInvalid,
+}: Props) {
+  const { register, handleSubmit } = useForm<SchemaInput, unknown, SchemaOutput>({
+    defaultValues: data
   });
-
-  const onValid = (data: any) => {
-    console.log(data);
-  };
-
-  const onInvalid = (errors: any) => {
-    console.error(errors);
-  };
 
   return (
     <form className="flex flex-col gap-2 m-2" onSubmit={handleSubmit(onValid, onInvalid)}>
       <h1>Create a new book!</h1>
       <div className="flex flex-col">
         <label htmlFor="name">Name</label>
-        <input id="name" name="name" type="text" className="border" />
+        <input id="name" type="text" {...register("name")} className="border" />
       </div>
       <div className="flex flex-col">
         <label htmlFor="description">Description</label>
         <textarea
           id="description"
-          name="description"
+          {...register("description")}
           className="border"
         />
       </div>
@@ -49,7 +44,7 @@ export default function BookForm() {
         <label htmlFor="publicationDate">Publication</label>
         <input
           id="publicationDate"
-          name="publicationDate"
+          {...register("publicationDate")}
           type="date"
           className="border"
         />
@@ -59,6 +54,7 @@ export default function BookForm() {
         <Select
           inputId="authorId"
           name="authorId"
+          // {...register("authorId")}
           loadOptions={() => loadAuthors().then(res => res.map(authorToOption))}
           className="text-black"
         />
@@ -67,7 +63,7 @@ export default function BookForm() {
         <label htmlFor="rating">Rating</label>
         <input
           id="rating"
-          name="rating"
+          {...register("rating")}
           type="number"
           className="border"
         />
